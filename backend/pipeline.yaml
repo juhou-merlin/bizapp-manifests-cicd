@@ -253,6 +253,10 @@ spec:
       description: コンテナイメージレジストリのURL
       type: string
       default: "image-registry.openshift-image-registry.svc:5000/bizapp"
+    - name: GIT_CREDENTIALS_SECRET
+      description: GitHub push 用 Secret 名
+      type: string
+      default: "github-credentials"
   workspaces:
     - name: source
       description: 作業用ワークスペース
@@ -261,6 +265,17 @@ spec:
     - name: git-clone
       image: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel8:latest
       workingDir: $(workspaces.source.path)
+      env:
+        - name: GIT_USERNAME
+          valueFrom:
+            secretKeyRef:
+              name: $(params.GIT_CREDENTIALS_SECRET)
+              key: username
+        - name: GIT_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: $(params.GIT_CREDENTIALS_SECRET)
+              key: token
       script: |
         #!/bin/bash
         set -eo pipefail
@@ -270,9 +285,13 @@ spec:
         # ワークスペースをクリア（前回の実行の残りを削除）
         rm -rf .git .[!.]* ..?* * 2>/dev/null || true
 
-        git clone "$(params.GIT_REPOSITORY)" .
+        AUTH_REPOSITORY="$(params.GIT_REPOSITORY)"
+        AUTH_REPOSITORY="${AUTH_REPOSITORY/https:\/\//https://${GIT_USERNAME}:${GIT_TOKEN}@}"
+
+        git clone "${AUTH_REPOSITORY}" .
         git config user.email "pipeline@openshift.local"
         git config user.name "Tekton Pipeline"
+        git remote set-url origin "${AUTH_REPOSITORY}"
 
     # ステップ 2: イメージタグを更新
     - name: update-image-tag
@@ -362,6 +381,10 @@ spec:
       description: ビルド対象のGitリビジョン（ブランチ名 or コミットSHA）
       type: string
       default: "main"
+    - name: git-ref
+      description: "Push イベントのGit参照（例: refs/heads/main）"
+      type: string
+      default: "refs/heads/main"
     - name: image-name
       description: 出力先コンテナイメージ名（タグなし）
       type: string
@@ -438,7 +461,7 @@ spec:
       runAfter:
         - build-and-test
       when:
-        - input: "$(params.git-revision)"
+        - input: "$(params.git-ref)"
           operator: in
           values: ["main", "refs/heads/main"]
       taskRef:
@@ -463,7 +486,7 @@ spec:
       runAfter:
         - build-image
       when:
-        - input: "$(params.git-revision)"
+        - input: "$(params.git-ref)"
           operator: in
           values: ["main", "refs/heads/main"]
       taskRef:

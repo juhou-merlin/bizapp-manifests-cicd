@@ -70,6 +70,8 @@ spec:
           # refs/heads/main → main に変換してブランチ判定に使用
           - name: git-revision
             value: $(tt.params.git-revision)
+          - name: git-ref
+            value: $(tt.params.git-ref)
           - name: git-url-manifests
             # アプリ用マニフェストリポジトリ（manifests-app）のURL
             value: "https://github.com/juhou-merlin/bizapp-manifests-app.git"

@@ -35,6 +35,38 @@ roleRef:
   name: admin
   apiGroup: rbac.authorization.k8s.io
 ---
+# --- 内部レジストリへのイメージ Push 権限 ---
+# buildah が image-registry.openshift-image-registry.svc:5000/bizapp へ push するために必要
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-sa-image-builder
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+subjects:
+  - kind: ServiceAccount
+    name: pipeline-sa
+roleRef:
+  kind: ClusterRole
+  name: system:image-builder
+  apiGroup: rbac.authorization.k8s.io
+---
+# --- buildah 実行用 SCC 権限 ---
+# rootless で動作しない buildah 環境に備え、パイプライン用 SA に privileged SCC を付与する
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-sa-privileged-scc
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+subjects:
+  - kind: ServiceAccount
+    name: pipeline-sa
+roleRef:
+  kind: ClusterRole
+  name: system:openshift:scc:privileged
+  apiGroup: rbac.authorization.k8s.io
+---
 # --- ClusterInterceptor 読み取り用 ClusterRole ---
 # EventListener が CEL Interceptor を使用するために必要
 apiVersion: rbac.authorization.k8s.io/v1
