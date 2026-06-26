@@ -263,7 +263,7 @@ spec:
   steps:
     # ステップ 1: マニフェストリポジトリをクローン
     - name: git-clone
-      image: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel8:latest
+      image: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel9@sha256:cfdb7edab602f2b476c0cc7b39cdad6f204bb7e991a6a9f27e1e5174b348fda5
       workingDir: $(workspaces.source.path)
       env:
         - name: GIT_USERNAME
@@ -324,7 +324,7 @@ spec:
 
     # ステップ 3: 変更をコミット＆プッシュ
     - name: git-push
-      image: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel8:latest
+      image: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel9@sha256:cfdb7edab602f2b476c0cc7b39cdad6f204bb7e991a6a9f27e1e5174b348fda5
       workingDir: $(workspaces.source.path)/manifest
       script: |
         #!/bin/bash
