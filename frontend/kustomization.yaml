@@ -1,0 +1,20 @@
+# ─────────────────────────────────────────────────────
+# フロントエンド CI/CD 用 Kustomization
+# パイプライン・タスク・トリガー等の CI/CD リソースをまとめる
+#
+# ArgoCD Application（argocd-cicd-frontend.yaml）がこのディレクトリを
+# 監視し、CI/CD リソースを OpenShift に自動デプロイする
+#
+# 注意: rbac.yaml は不要（バックエンドで定義した pipeline-sa を共用）
+# 注意: git-update-manifest Task も不要（バックエンドで定義済みのものを共用）
+# ─────────────────────────────────────────────────────
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # パイプライン定義（Pipeline + カスタム Task: npm-build-test, s2i-nodejs-build）
+  - pipeline.yaml
+  # Webhook トリガー（EventListener + TriggerBinding + TriggerTemplate）
+  - eventlistener.yaml
+  # npm キャッシュ用 PVC
+  - pvc.yaml
