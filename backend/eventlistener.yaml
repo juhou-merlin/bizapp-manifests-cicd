@@ -62,6 +62,11 @@ spec:
         # パイプライン実行用の ServiceAccount
         taskRunTemplate:
           serviceAccountName: pipeline-sa
+          podTemplate:
+            securityContext:
+              # PVC 直下への書き込みと buildah 実行のため、pipeline-sa に付与した privileged SCC を使用する
+              runAsUser: 0
+              fsGroup: 0
         pipelineRef:
           name: backend-pipeline
         params:
