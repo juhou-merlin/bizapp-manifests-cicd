@@ -81,15 +81,11 @@ spec:
             # アプリ用マニフェストリポジトリ（manifests-app）のURL
             value: "https://github.com/juhou-merlin/bizapp-manifests-app.git"
         workspaces:
-          # ソースコードとビルド成果物用（PipelineRun毎に新規作成）
+          # ソースコード、ビルド成果物、Maven キャッシュを同一 PVC 内の別ディレクトリで扱う
+          # OpenShift Pipelines の RWO PVC 制約により、1 Task で複数 PVC を同時利用しない
           - name: shared-workspace
-            volumeClaimTemplate:
-              spec:
-                accessModes:
-                  - ReadWriteOnce
-                resources:
-                  requests:
-                    storage: 1Gi
+            persistentVolumeClaim:
+              claimName: maven-cache-pvc
           # Maven キャッシュ用（PVC を永続利用）
           - name: maven-cache
             persistentVolumeClaim:
