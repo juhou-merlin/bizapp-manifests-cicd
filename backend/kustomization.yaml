@@ -1,0 +1,19 @@
+# ─────────────────────────────────────────────────────
+# バックエンド CI/CD 用 Kustomization
+# パイプライン・タスク・トリガー等の CI/CD リソースをまとめる
+#
+# ArgoCD Application（argocd-cicd-backend.yaml）がこのディレクトリを
+# 監視し、CI/CD リソースを OpenShift に自動デプロイする
+# ─────────────────────────────────────────────────────
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  # パイプライン定義（Pipeline + カスタム Task）
+  - pipeline.yaml
+  # Webhook トリガー（EventListener + TriggerBinding + TriggerTemplate）
+  - eventlistener.yaml
+  # 権限管理（ServiceAccount + RoleBinding）
+  - rbac.yaml
+  # Maven キャッシュ用 PVC
+  - pvc.yaml

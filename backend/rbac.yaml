@@ -1,0 +1,65 @@
+# ─────────────────────────────────────────────────────
+# パイプライン用 RBAC（権限管理）
+# ─────────────────────────────────────────────────────
+# パイプラインの実行に必要な ServiceAccount と権限を定義する
+# EventListener・PipelineRun はこの ServiceAccount で実行される
+#
+# フロントエンド開発者への注意:
+#   フロントエンドパイプラインでも同じ ServiceAccount を共用できます。
+#   追加の RBAC 定義は不要です。
+
+# --- パイプライン実行用 ServiceAccount ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: pipeline-sa
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+  annotations:
+    # ArgoCD の同期順序を制御（RBACを先に作成）
+    argocd.argoproj.io/sync-wave: "1"
+---
+# --- Namespace 内の admin 権限を付与 ---
+# パイプラインが Deployment / Service / BuildConfig 等を操作するために必要
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: pipeline-sa-admin
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+subjects:
+  - kind: ServiceAccount
+    name: pipeline-sa
+roleRef:
+  kind: ClusterRole
+  name: admin
+  apiGroup: rbac.authorization.k8s.io
+---
+# --- ClusterInterceptor 読み取り用 ClusterRole ---
+# EventListener が CEL Interceptor を使用するために必要
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: bizapp-interceptor-reader
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+rules:
+  - apiGroups: ["triggers.tekton.dev"]
+    resources: ["clusterinterceptors"]
+    verbs: ["get", "list", "watch"]
+---
+# --- 上記 ClusterRole を pipeline-sa に紐付け ---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: bizapp-interceptor-binding
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+subjects:
+  - kind: ServiceAccount
+    name: pipeline-sa
+    namespace: bizapp
+roleRef:
+  kind: ClusterRole
+  name: bizapp-interceptor-reader
+  apiGroup: rbac.authorization.k8s.io

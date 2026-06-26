@@ -1,0 +1,28 @@
+# ─────────────────────────────────────────────────────
+# パイプライン用 PersistentVolumeClaim
+# ─────────────────────────────────────────────────────
+# Maven 依存ライブラリのキャッシュを永続化するための PVC
+# パイプライン実行のたびに外部からダウンロードが発生しないようにする
+#
+# v0.1仕様: バックエンド（Maven）のライブラリキャッシュ
+#
+# フロントエンド開発者への注意:
+#   フロントエンド用にも同様の PVC を作成してください。
+#   npm パッケージキャッシュ用に使用します。
+#   storageClassName は使用する環境のデフォルトStorageClassに合わせてください。
+
+# --- Maven 依存ライブラリキャッシュ用 PVC ---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: maven-cache-pvc
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+spec:
+  accessModes:
+    # 単一パイプライン実行での利用を想定
+    - ReadWriteOnce
+  resources:
+    requests:
+      # Maven リポジトリキャッシュには十分なサイズを確保する
+      storage: 5Gi
