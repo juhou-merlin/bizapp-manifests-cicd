@@ -262,9 +262,11 @@ spec:
       description: 作業用ワークスペース
   steps:
     # ステップ 1: マニフェストリポジトリをクローン
+    # 注意: clone先はカレントディレクトリ(.)ではなく明示的な MANIFEST_DIR を指定する
+    # cd に依存すると「not in a git directory」エラーが発生するため、
+    # git -C で対象ディレクトリを明示的に指定する
     - name: git-clone
       image: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel9@sha256:cfdb7edab602f2b476c0cc7b39cdad6f204bb7e991a6a9f27e1e5174b348fda5
-      workingDir: $(workspaces.source.path)
       env:
         - name: GIT_USERNAME
           valueFrom:
@@ -282,18 +284,29 @@ spec:
 
         echo "マニフェストリポジトリをクローン中..."
 
-        # マニフェスト更新用サブディレクトリをクリア（PVC直下の lost+found は触らない）
-        mkdir -p "$(workspaces.source.path)/manifest"
-        cd "$(workspaces.source.path)/manifest"
-        rm -rf .git .[!.]* ..?* * 2>/dev/null || true
+        # clone先ディレクトリを明示的に定義（PVC直下の lost+found を避ける）
+        MANIFEST_DIR="$(workspaces.source.path)/manifest"
 
+        # 前回実行の残りを完全に削除してからclone
+        rm -rf "${MANIFEST_DIR}"
+        mkdir -p "$(workspaces.source.path)"
+
+        # 認証情報付きURLを構成
         AUTH_REPOSITORY="$(params.GIT_REPOSITORY)"
         AUTH_REPOSITORY="${AUTH_REPOSITORY/https:\/\//https://${GIT_USERNAME}:${GIT_TOKEN}@}"
 
-        git clone "${AUTH_REPOSITORY}" .
-        git config user.email "pipeline@openshift.local"
-        git config user.name "Tekton Pipeline"
-        git remote set-url origin "${AUTH_REPOSITORY}"
+        # 明示的なディレクトリにclone（カレントディレクトリ . は使用しない）
+        git clone "${AUTH_REPOSITORY}" "${MANIFEST_DIR}"
+
+        # Gitリポジトリとして正常にcloneできたことを確認
+        git -C "${MANIFEST_DIR}" rev-parse --is-inside-work-tree
+
+        # cd に依存せず git -C でコミッター情報とリモートURLを設定
+        git -C "${MANIFEST_DIR}" config user.email "pipeline@openshift.local"
+        git -C "${MANIFEST_DIR}" config user.name "Tekton Pipeline"
+        git -C "${MANIFEST_DIR}" remote set-url origin "${AUTH_REPOSITORY}"
+
+        echo "クローン完了: ${MANIFEST_DIR}"
 
     # ステップ 2: イメージタグを更新
     - name: update-image-tag
