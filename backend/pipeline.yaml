@@ -262,11 +262,14 @@ spec:
       description: 作業用ワークスペース
   steps:
     # ステップ 1: マニフェストリポジトリをクローン
-    # 注意: clone先はカレントディレクトリ(.)ではなく明示的な MANIFEST_DIR を指定する
-    # cd に依存すると「not in a git directory」エラーが発生するため、
-    # git -C で対象ディレクトリを明示的に指定する
+    # 重要: workingDir に manifest ディレクトリを指定しない
+    # git-clone Step で rm -rf → git clone するため、後続 Step の workingDir が
+    # 削除済みディレクトリを指すと「getcwd: cannot access parent directories」エラーになる
+    # 全 Step の workingDir を $(workspaces.source.path) に統一し、
+    # manifest ディレクトリへは絶対パスまたは git -C でアクセスする
     - name: git-clone
       image: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel9@sha256:cfdb7edab602f2b476c0cc7b39cdad6f204bb7e991a6a9f27e1e5174b348fda5
+      workingDir: $(workspaces.source.path)
       env:
         - name: GIT_USERNAME
           valueFrom:
@@ -309,14 +312,17 @@ spec:
         echo "クローン完了: ${MANIFEST_DIR}"
 
     # ステップ 2: イメージタグを更新
+    # workingDir は $(workspaces.source.path) に固定（manifest ディレクトリは使わない）
+    # ファイルパスはすべて絶対パスで指定する
     - name: update-image-tag
       image: registry.access.redhat.com/ubi9/ubi-minimal:latest
-      workingDir: $(workspaces.source.path)/manifest
+      workingDir: $(workspaces.source.path)
       script: |
         #!/bin/bash
         set -eo pipefail
 
-        ARGOCD_SOURCE="$(params.KUSTOMIZATION_PATH)/.argocd-source.yaml"
+        MANIFEST_DIR="$(workspaces.source.path)/manifest"
+        ARGOCD_SOURCE="${MANIFEST_DIR}/$(params.KUSTOMIZATION_PATH)/.argocd-source.yaml"
         IMAGE_NAME="bizapp-$(params.APP_NAME)"
         FULL_IMAGE="$(params.IMAGE_REGISTRY)/${IMAGE_NAME}:$(params.IMAGE_TAG)"
 
@@ -327,31 +333,63 @@ spec:
         echo " 新イメージ: ${FULL_IMAGE}"
         echo "========================================="
 
+        # デバッグ用: ディレクトリ構造を表示（問題発生時の原因調査用）
+        echo "--- デバッグ情報 ---"
+        echo "pwd: $(pwd)"
+        ls -la "$(workspaces.source.path)"
+        ls -la "${MANIFEST_DIR}"
+        ls -la "${MANIFEST_DIR}/$(params.KUSTOMIZATION_PATH)"
+        echo "--- ---"
+
+        # 対象ファイルの存在確認
+        if [ ! -f "${ARGOCD_SOURCE}" ]; then
+          echo "エラー: ${ARGOCD_SOURCE} が見つかりません。"
+          echo "マニフェストリポジトリのクローンに失敗した可能性があります。"
+          exit 1
+        fi
+
+        # 更新対象の IMAGE_NAME= 行の存在確認
+        if ! grep -q "${IMAGE_NAME}=" "${ARGOCD_SOURCE}"; then
+          echo "エラー: ${ARGOCD_SOURCE} に ${IMAGE_NAME}= の行が見つかりません。"
+          echo "--- 現在の .argocd-source.yaml の内容 ---"
+          cat "${ARGOCD_SOURCE}"
+          echo "--- ---"
+          exit 1
+        fi
+
         # .argocd-source.yaml のイメージタグを更新
-        # sed で該当行のイメージタグを新しい値に置換する
-        sed -i "s|${IMAGE_NAME}=.*|${IMAGE_NAME}=${FULL_IMAGE}|" "${ARGOCD_SOURCE}"
+        # sed -i はコンテナ環境で問題が生じる場合があるため、一時ファイル経由で上書き
+        sed "s|${IMAGE_NAME}=.*|${IMAGE_NAME}=${FULL_IMAGE}|" "${ARGOCD_SOURCE}" > /tmp/argocd-source.yaml
+        cat /tmp/argocd-source.yaml > "${ARGOCD_SOURCE}"
 
         echo "--- 更新後の .argocd-source.yaml ---"
         cat "${ARGOCD_SOURCE}"
         echo "--- ---"
 
     # ステップ 3: 変更をコミット＆プッシュ
+    # workingDir は $(workspaces.source.path) に固定（manifest ディレクトリは使わない）
+    # git コマンドはすべて git -C で manifest ディレクトリを明示指定する
     - name: git-push
       image: registry.redhat.io/openshift-pipelines/pipelines-git-init-rhel9@sha256:cfdb7edab602f2b476c0cc7b39cdad6f204bb7e991a6a9f27e1e5174b348fda5
-      workingDir: $(workspaces.source.path)/manifest
+      workingDir: $(workspaces.source.path)
       script: |
         #!/bin/bash
         set -eo pipefail
 
-        # 変更がある場合のみコミット
-        if git diff --quiet; then
+        MANIFEST_DIR="$(workspaces.source.path)/manifest"
+
+        # 変更状態を確認
+        git -C "${MANIFEST_DIR}" status
+
+        # 変更がある場合のみコミット＆プッシュ
+        if git -C "${MANIFEST_DIR}" diff --quiet; then
           echo "変更なし。プッシュをスキップします。"
           exit 0
         fi
 
-        git add -A
-        git commit -m "ci($(params.APP_NAME)): イメージタグを $(params.IMAGE_TAG) に更新"
-        git push origin main
+        git -C "${MANIFEST_DIR}" add "$(params.KUSTOMIZATION_PATH)/.argocd-source.yaml"
+        git -C "${MANIFEST_DIR}" commit -m "ci($(params.APP_NAME)): イメージタグを $(params.IMAGE_TAG) に更新"
+        git -C "${MANIFEST_DIR}" push origin HEAD:main
 
         echo "マニフェスト更新をプッシュしました。"
         echo "ArgoCD が変更を検知して自動デプロイを開始します。"
