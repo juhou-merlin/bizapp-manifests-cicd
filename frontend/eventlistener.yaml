@@ -1,0 +1,132 @@
+# ─────────────────────────────────────────────────────
+# Tekton Triggers: フロントエンド GitHub Webhook 受信設定
+# ─────────────────────────────────────────────────────
+# GitHub の Push イベントを受信し、フロントエンドパイプラインを自動実行する
+#
+# v0.1仕様: GitHub 上のリポジトリ変更を検知し、パイプラインを自動実行すること
+#
+# セットアップ手順:
+#   1. この EventListener をデプロイすると、自動的に Service が作成される
+#   2. Route 経由でインターネットに公開される
+#   3. GitHub のフロントエンドリポジトリの Webhook 設定に Route の URL を登録する
+#   4. Content type は application/json を選択する
+#   5. Push イベントをトリガーに設定する
+
+# --- TriggerBinding: Webhook ペイロードからパラメータを抽出 ---
+# バックエンドと同じ構造だが、別名で定義する
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerBinding
+metadata:
+  name: frontend-github-binding
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+spec:
+  params:
+    # GitHub Push イベントの JSON ペイロードからパラメータを抽出
+    - name: git-revision
+      value: $(body.after)
+    - name: git-url
+      value: $(body.repository.clone_url)
+    - name: git-ref
+      value: $(body.ref)
+
+---
+# --- TriggerTemplate: PipelineRun を生成するテンプレート ---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: TriggerTemplate
+metadata:
+  name: frontend-build-template
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+spec:
+  params:
+    - name: git-revision
+    - name: git-url
+    - name: git-ref
+  resourcetemplates:
+    - apiVersion: tekton.dev/v1
+      kind: PipelineRun
+      metadata:
+        # 一意な名前を自動生成（パイプライン名 + タイムスタンプ）
+        generateName: frontend-pipeline-run-
+        labels:
+          tekton.dev/pipeline: frontend-pipeline
+          app.kubernetes.io/part-of: bizapp-cicd
+      spec:
+        # パイプライン実行用の ServiceAccount（バックエンドと共用）
+        taskRunTemplate:
+          serviceAccountName: pipeline-sa
+          podTemplate:
+            securityContext:
+              # PVC 直下への書き込みと buildah 実行のため、pipeline-sa に付与した privileged SCC を使用する
+              runAsUser: 0
+              fsGroup: 0
+        pipelineRef:
+          name: frontend-pipeline
+        params:
+          - name: git-url
+            value: $(tt.params.git-url)
+          - name: git-revision
+            value: $(tt.params.git-revision)
+          - name: git-ref
+            value: $(tt.params.git-ref)
+          - name: git-url-manifests
+            # アプリ用マニフェストリポジトリ（manifests-app）のURL
+            value: "https://github.com/juhou-merlin/bizapp-manifests-app.git"
+        workspaces:
+          # ソースコード、ビルド成果物、npm キャッシュを同一 PVC 内の別ディレクトリで扱う
+          # OpenShift Pipelines の RWO PVC 制約により、1 Task で複数 PVC を同時利用しない
+          - name: shared-workspace
+            persistentVolumeClaim:
+              claimName: npm-cache-pvc
+          # npm キャッシュ用（PVC を永続利用）
+          - name: npm-cache
+            persistentVolumeClaim:
+              claimName: npm-cache-pvc
+
+---
+# --- EventListener: Webhook を受信するリスナー ---
+apiVersion: triggers.tekton.dev/v1beta1
+kind: EventListener
+metadata:
+  name: frontend-github-listener
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+spec:
+  # バックエンドと同じ ServiceAccount を共用
+  serviceAccountName: pipeline-sa
+  triggers:
+    - name: frontend-push-trigger
+      bindings:
+        - ref: frontend-github-binding
+      template:
+        ref: frontend-build-template
+      interceptors:
+        # Push イベントのみ処理する CEL フィルター
+        - ref:
+            name: "cel"
+          params:
+            - name: "filter"
+              # refs/heads/ で始まるイベントのみ処理（タグは除外）
+              value: "body.ref.startsWith('refs/heads/')"
+
+---
+# --- Route: EventListener を外部に公開 ---
+# GitHub Webhook からアクセスするためにインターネットに公開する
+apiVersion: route.openshift.io/v1
+kind: Route
+metadata:
+  name: frontend-github-listener
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+spec:
+  to:
+    kind: Service
+    # el-<EventListener名> の命名規則で自動作成される Service
+    name: el-frontend-github-listener
+    weight: 100
+  port:
+    targetPort: http-listener
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Redirect
