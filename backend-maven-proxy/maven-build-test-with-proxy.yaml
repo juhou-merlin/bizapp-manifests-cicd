@@ -1,0 +1,69 @@
+apiVersion: tekton.dev/v1
+kind: Task
+metadata:
+  name: maven-build-test-with-proxy
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+  annotations:
+    tekton.dev/displayName: "Maven ビルド＆テスト（Proxy対応）"
+spec:
+  description: |
+    ConfigMap の Maven settings.xml を使用して、HTTP Proxy 経由で
+    Spring Boot アプリケーションをビルド・テストする。
+  params:
+    - name: GOALS
+      description: Maven の実行ゴール
+      type: string
+      default: "clean package"
+    - name: MAVEN_IMAGE
+      description: Maven 実行用のコンテナイメージ
+      type: string
+      default: "registry.access.redhat.com/ubi9/openjdk-21:latest"
+  workspaces:
+    - name: source
+      description: ソースコードが格納されたワークスペース
+    - name: maven-cache
+      description: Maven リポジトリキャッシュ用ワークスペース
+  volumes:
+    - name: maven-proxy-settings
+      configMap:
+        name: maven-proxy-settings
+        items:
+          - key: settings.xml
+            path: settings.xml
+  steps:
+    - name: mvn-build
+      image: $(params.MAVEN_IMAGE)
+      workingDir: $(workspaces.source.path)/source
+      volumeMounts:
+        - name: maven-proxy-settings
+          mountPath: /etc/maven-proxy
+          readOnly: true
+      env:
+        - name: MAVEN_OPTS
+          value: "-Dmaven.repo.local=$(workspaces.maven-cache.path)/.m2/repository"
+      script: |
+        #!/bin/bash
+        set -euo pipefail
+
+        SETTINGS_FILE=/etc/maven-proxy/settings.xml
+        LOCAL_REPOSITORY="$(workspaces.maven-cache.path)/.m2/repository"
+
+        test -r "${SETTINGS_FILE}"
+        mkdir -p "${LOCAL_REPOSITORY}"
+
+        echo "Maven build through settings.xml proxy"
+        echo "Goals: $(params.GOALS)"
+
+        if [ -f "./mvnw" ]; then
+          chmod +x ./mvnw
+          ./mvnw -B \
+            -s "${SETTINGS_FILE}" \
+            -Dmaven.repo.local="${LOCAL_REPOSITORY}" \
+            $(params.GOALS)
+        else
+          mvn -B \
+            -s "${SETTINGS_FILE}" \
+            -Dmaven.repo.local="${LOCAL_REPOSITORY}" \
+            $(params.GOALS)
+        fi

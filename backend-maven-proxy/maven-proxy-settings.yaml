@@ -1,0 +1,20 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: maven-proxy-settings
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+data:
+  settings.xml: |
+    <settings>
+      <proxies>
+        <proxy>
+          <id>outbound-proxy</id>
+          <active>true</active>
+          <protocol>http</protocol>
+          <host>proxy.example.com</host>
+          <port>8080</port>
+          <nonProxyHosts>localhost|127.0.0.1|*.svc|*.cluster.local|*.example.com</nonProxyHosts>
+        </proxy>
+      </proxies>
+    </settings>
