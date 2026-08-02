@@ -1,4 +1,5 @@
-# Template only. Never commit real proxy credentials to Git.
+# Sample only. The credentials below are fictitious.
+# Never commit real proxy credentials to Git.
 apiVersion: v1
 kind: Secret
 metadata:
@@ -11,13 +12,34 @@ stringData:
     <settings>
       <proxies>
         <proxy>
+          <!-- 任意の識別名。複数のProxyを定義する場合は重複させない。 -->
           <id>authenticated-https-proxy</id>
+
+          <!-- このProxy設定を使用する。無効化する場合は false にする。 -->
           <active>true</active>
+
+          <!--
+            Proxyサーバー自体へHTTPSで接続する例。
+            Proxyサーバー自体がHTTPの場合は http に変更する。
+            Maven RepositoryがHTTPSかどうかとは別の設定。
+          -->
           <protocol>https</protocol>
-          <host>secure-proxy.example.com</host>
+
+          <!-- 実環境のProxyホスト名と待受ポートに変更する。 -->
+          <host>proxy.example.com</host>
           <port>8443</port>
-          <username>REPLACE_WITH_PROXY_USERNAME</username>
-          <password>REPLACE_WITH_PROXY_PASSWORD</password>
+
+          <!--
+            認証付きProxyの記述例。
+            Proxy認証が不要な場合は username と password の2項目を削除する。
+          -->
+          <username>proxyuser01</username>
+          <password>SamplePassw0rd!</password>
+
+          <!--
+            Proxyを経由しないホストを | で区切る。
+            除外対象がない場合は nonProxyHosts の項目を削除する。
+          -->
           <nonProxyHosts>localhost|127.0.0.1|*.svc|*.cluster.local|*.internal.example.com</nonProxyHosts>
         </proxy>
       </proxies>

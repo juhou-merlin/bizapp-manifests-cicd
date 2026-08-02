@@ -139,9 +139,10 @@ Proxy サーバー自体への接続に TLS を使用し、認証が不要な場
 信頼できることも確認する。
 
 認証情報を含む `settings.xml` は Git や ConfigMap に保存しない。リポジトリ内
-の `maven-proxy-settings-sample.yaml` はプレースホルダーだけを含むサンプルである。実際の
-値への置き換えは Git 管理外で行い、そのファイルを Kubernetes Secret として
-適用する。実際の認証情報へ置き換えたファイルはコミットしない。
+の `maven-proxy-settings-sample.yaml` に記載されたユーザー名とパスワードは、
+書式を示すための架空のサンプル値であり、実際の認証情報ではない。実際の値への
+置き換えは Git 管理外で行い、そのファイルを Kubernetes Secret として適用する。
+実際の認証情報へ置き換えたファイルはコミットしない。
 
 Secret を使用する場合は、`maven-build-test-with-proxy.yaml` の volume 定義を
 `configMap` から次の `secret` 定義に変更する。
