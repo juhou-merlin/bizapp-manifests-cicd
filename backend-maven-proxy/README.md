@@ -16,6 +16,7 @@ ROSA の Cluster-wide Proxy は Tekton Step に `HTTP_PROXY`、`HTTPS_PROXY`、
 
 - `maven-proxy-settings.yaml`: HTTP Proxy を定義する ConfigMap
 - `maven-build-test-with-proxy.yaml`: 既存 Task と置き換え可能な Maven Task
+- `backend-pipeline-with-maven-proxy.yaml`: Proxy 対応 Task を参照する独立した Pipeline 定義
 - `use-proxy-task.json`: `backend-pipeline` を Proxy 対応 Task に切り替える patch
 - `restore-standard-task.json`: 元の Maven Task に戻す patch
 - `validate-maven-proxy-taskrun.yaml`: Maven Central 接続確認用 TaskRun
@@ -98,6 +99,19 @@ oc patch pipeline backend-pipeline \
   --type=json \
   --patch-file manifests-cicd/backend-maven-proxy/use-proxy-task.json
 ```
+
+JSON patch の代わりに、Proxy 対応 Task へ切り替え済みの完全な Pipeline YAML を
+適用することもできる。この YAML は既存の `backend-pipeline` を変更せず、
+`backend-pipeline-proxy-fixed` という別名の Pipeline を作成する。
+
+```bash
+oc apply -f \
+  manifests-cicd/backend-maven-proxy/backend-pipeline-with-maven-proxy.yaml \
+  -n bizapp
+```
+
+既存 Pipeline をそのまま使用する場合は JSON patch、新旧 Pipeline を並行して
+比較する場合は完全な Pipeline YAML を使用する。
 
 PipelineRun 側に Proxy 設定を追加する必要はない。Task が ConfigMap を
 `/etc/maven-proxy/settings.xml` に read-only でマウントし、Maven を

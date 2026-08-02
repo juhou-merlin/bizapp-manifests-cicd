@@ -1,0 +1,112 @@
+apiVersion: tekton.dev/v1
+kind: Pipeline
+metadata:
+  name: backend-pipeline-proxy-fixed
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+  annotations:
+    tekton.dev/displayName: "バックエンド CI/CD パイプライン（Maven Proxy対応）"
+spec:
+  description: |
+    バックエンド（Spring Boot）のCI/CDパイプライン。
+    Maven settings.xml を使用する Proxy 対応 Task でビルドとテストを実行する。
+  params:
+    - name: git-url
+      description: バックエンドソースコードリポジトリのURL
+      type: string
+      default: "https://github.com/juhou-merlin/bizapp-backend.git"
+    - name: git-revision
+      description: ビルド対象のGitリビジョン（ブランチ名 or コミットSHA）
+      type: string
+      default: "main"
+    - name: git-ref
+      description: "Push イベントのGit参照（例: refs/heads/main）"
+      type: string
+      default: "refs/heads/main"
+    - name: image-name
+      description: 出力先コンテナイメージ名（タグなし）
+      type: string
+      default: "image-registry.openshift-image-registry.svc:5000/bizapp/bizapp-backend"
+    - name: git-url-manifests
+      description: アプリ用マニフェストリポジトリ（manifests-app）のURL
+      type: string
+      default: "https://github.com/juhou-merlin/bizapp-manifests-app.git"
+  workspaces:
+    - name: shared-workspace
+      description: ソースコードとビルド成果物を共有するワークスペース
+    - name: maven-cache
+      description: Maven 依存ライブラリのキャッシュ用ワークスペース（PVC）
+  tasks:
+    - name: fetch-source
+      taskRef:
+        resolver: cluster
+        params:
+          - name: kind
+            value: task
+          - name: name
+            value: git-clone
+          - name: namespace
+            value: openshift-pipelines
+      workspaces:
+        - name: output
+          workspace: shared-workspace
+      params:
+        - name: URL
+          value: $(params.git-url)
+        - name: REVISION
+          value: $(params.git-revision)
+        - name: SUBDIRECTORY
+          value: "source"
+        - name: DELETE_EXISTING
+          value: "true"
+
+    # Maven settings.xml を ConfigMap から読み込む Proxy 対応 Task を使用する。
+    - name: build-and-test
+      runAfter:
+        - fetch-source
+      taskRef:
+        name: maven-build-test-with-proxy
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+        - name: maven-cache
+          workspace: maven-cache
+      params:
+        - name: GOALS
+          value: "clean package"
+
+    - name: build-image
+      runAfter:
+        - build-and-test
+      when:
+        - input: "$(params.git-ref)"
+          operator: in
+          values: ["main", "refs/heads/main"]
+      taskRef:
+        name: s2i-java-build
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: IMAGE
+          value: "$(params.image-name):$(tasks.fetch-source.results.COMMIT)"
+
+    - name: update-manifest
+      runAfter:
+        - build-image
+      when:
+        - input: "$(params.git-ref)"
+          operator: in
+          values: ["main", "refs/heads/main"]
+      taskRef:
+        name: git-update-manifest
+      workspaces:
+        - name: source
+          workspace: shared-workspace
+      params:
+        - name: GIT_REPOSITORY
+          value: $(params.git-url-manifests)
+        - name: APP_NAME
+          value: "backend"
+        - name: IMAGE_TAG
+          value: "$(tasks.fetch-source.results.COMMIT)"
