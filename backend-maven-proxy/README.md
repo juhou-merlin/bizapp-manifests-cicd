@@ -15,6 +15,7 @@ ROSA の Cluster-wide Proxy は Tekton Step に `HTTP_PROXY`、`HTTPS_PROXY`、
 ## ファイル
 
 - `maven-proxy-settings.yaml`: HTTP Proxy を定義する ConfigMap
+- `maven-proxy-settings-sample.yaml`: HTTPS・認証付き Proxy 用 Secret テンプレート
 - `maven-build-test-with-proxy.yaml`: 既存 Task と置き換え可能な Maven Task
 - `backend-pipeline-with-maven-proxy.yaml`: Proxy 対応 Task を参照する独立した Pipeline 定義
 - `kustomization.yaml`: ConfigMap、Proxy 対応 Task、Pipeline のインストール
@@ -69,6 +70,15 @@ Proxy 認証が必要な場合は、次の要素も必要になる。
 認証情報を含む `settings.xml` は Git や ConfigMap に保存しない。Kubernetes
 Secret として作成し、`maven-build-test-with-proxy.yaml` の volume 定義を
 `configMap` から `secret` に変更する。
+
+`maven-proxy-settings-sample.yaml` は、HTTPS Proxy とユーザー名・パスワードを
+使用する場合の Secret テンプレートである。リポジトリ内の値はすべてサンプル
+なので、実環境では Git 管理外で実際の値に置き換えてから適用する。実際の
+認証情報へ置き換えたファイルはコミットしない。
+
+このテンプレートの `<protocol>https</protocol>` は、Proxy サーバー自体への
+接続に TLS を使用する場合の設定である。HTTPS の Maven Repository に HTTP
+CONNECT Proxy 経由で接続するだけの場合は、`protocol` を `http` にする。
 
 ```yaml
 volumes:

@@ -1,0 +1,24 @@
+# Template only. Never commit real proxy credentials to Git.
+apiVersion: v1
+kind: Secret
+metadata:
+  name: maven-proxy-settings
+  labels:
+    app.kubernetes.io/part-of: bizapp-cicd
+type: Opaque
+stringData:
+  settings.xml: |
+    <settings>
+      <proxies>
+        <proxy>
+          <id>authenticated-https-proxy</id>
+          <active>true</active>
+          <protocol>https</protocol>
+          <host>secure-proxy.example.com</host>
+          <port>8443</port>
+          <username>REPLACE_WITH_PROXY_USERNAME</username>
+          <password>REPLACE_WITH_PROXY_PASSWORD</password>
+          <nonProxyHosts>localhost|127.0.0.1|*.svc|*.cluster.local|*.internal.example.com</nonProxyHosts>
+        </proxy>
+      </proxies>
+    </settings>
