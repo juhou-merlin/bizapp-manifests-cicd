@@ -1,7 +1,0 @@
-[
-  {
-    "op": "replace",
-    "path": "/spec/tasks/1/taskRef/name",
-    "value": "maven-build-test"
-  }
-]
