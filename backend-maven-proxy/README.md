@@ -60,25 +60,91 @@ Proxy 自体への接続方式を示す。
 2. NetworkPolicy、Security Group、Firewall で Proxy のホストとポートへの通信が許可されている。
 3. Maven Repository のホスト名が誤って `nonProxyHosts` に含まれていない。
 
-Proxy 認証が必要な場合は、次の要素も必要になる。
+### Protocol と認証方式の選択
+
+`protocol` と認証情報は、Proxy サーバーの仕様に合わせて次のように設定する。
+
+| Proxy 自体への接続 | Proxy 認証 | `protocol` | `username` / `password` |
+| --- | --- | --- | --- |
+| HTTP | なし | `http` | 記述しない |
+| HTTP | あり | `http` | 両方を記述する |
+| HTTPS | なし | `https` | 記述しない |
+| HTTPS | あり | `https` | 両方を記述する |
+
+認証を使用しない場合、`username` と `password` は空文字で残さず、要素自体を
+削除する。
+
+#### HTTP Proxy・認証なし
+
+一般的な HTTP CONNECT Proxy の設定。HTTPS の Maven Repository に接続する
+場合でも、Proxy 自体が HTTP であればこの設定を使用する。
 
 ```xml
-<username>proxy-user</username>
-<password>proxy-password</password>
+<proxy>
+  <id>outbound-proxy</id>
+  <active>true</active>
+  <protocol>http</protocol>
+  <host>proxy.example.com</host>
+  <port>8080</port>
+</proxy>
 ```
 
-認証情報を含む `settings.xml` は Git や ConfigMap に保存しない。Kubernetes
-Secret として作成し、`maven-build-test-with-proxy.yaml` の volume 定義を
-`configMap` から `secret` に変更する。
+#### HTTP Proxy・認証あり
 
-`maven-proxy-settings-sample.yaml` は、HTTPS Proxy とユーザー名・パスワードを
-使用する場合の Secret テンプレートである。リポジトリ内の値はすべてサンプル
-なので、実環境では Git 管理外で実際の値に置き換えてから適用する。実際の
-認証情報へ置き換えたファイルはコミットしない。
+```xml
+<proxy>
+  <id>authenticated-http-proxy</id>
+  <active>true</active>
+  <protocol>http</protocol>
+  <host>proxy.example.com</host>
+  <port>8080</port>
+  <username>REPLACE_WITH_PROXY_USERNAME</username>
+  <password>REPLACE_WITH_PROXY_PASSWORD</password>
+</proxy>
+```
 
-このテンプレートの `<protocol>https</protocol>` は、Proxy サーバー自体への
-接続に TLS を使用する場合の設定である。HTTPS の Maven Repository に HTTP
-CONNECT Proxy 経由で接続するだけの場合は、`protocol` を `http` にする。
+#### HTTPS Proxy・認証なし
+
+Proxy サーバー自体への接続に TLS を使用し、認証が不要な場合の設定。
+
+```xml
+<proxy>
+  <id>outbound-https-proxy</id>
+  <active>true</active>
+  <protocol>https</protocol>
+  <host>secure-proxy.example.com</host>
+  <port>8443</port>
+</proxy>
+```
+
+#### HTTPS Proxy・認証あり
+
+`maven-proxy-settings-sample.yaml` は、この組み合わせの Secret テンプレートで
+ある。
+
+```xml
+<proxy>
+  <id>authenticated-https-proxy</id>
+  <active>true</active>
+  <protocol>https</protocol>
+  <host>secure-proxy.example.com</host>
+  <port>8443</port>
+  <username>REPLACE_WITH_PROXY_USERNAME</username>
+  <password>REPLACE_WITH_PROXY_PASSWORD</password>
+</proxy>
+```
+
+`protocol` は Maven Repository の URL ではなく、Proxy サーバー自体への接続
+方式を示す。HTTPS Proxy を使用する場合は、Proxy のサーバー証明書をコンテナが
+信頼できることも確認する。
+
+認証情報を含む `settings.xml` は Git や ConfigMap に保存しない。リポジトリ内
+の `maven-proxy-settings-sample.yaml` はプレースホルダーだけを含むサンプルである。実際の
+値への置き換えは Git 管理外で行い、そのファイルを Kubernetes Secret として
+適用する。実際の認証情報へ置き換えたファイルはコミットしない。
+
+Secret を使用する場合は、`maven-build-test-with-proxy.yaml` の volume 定義を
+`configMap` から次の `secret` 定義に変更する。
 
 ```yaml
 volumes:
